@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	bashpb "github.com/chn555/grash/bash"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"time"
 )
 
 type BashServiceServer struct{}
@@ -60,12 +62,39 @@ func (s *BashServiceServer) Execute(ctx context.Context, req *bashpb.CommandRequ
 	//	return nil, fmt.Errorf("an't Execute this on a windows machine")
 	//
 	//}
-	out, err := exec.Command("cmd", "/c", req.Command).Output()
+	//out, err := exec.Command("cmd", "/c", req.Command).Output()
+
+	return RunCommand(req)
+}
+
+func RunCommand(req *bashpb.CommandRequest) (*bashpb.CommandResponse, error) {
+	// Put the command in a string slice
+	// Declare the current working directory
+	dir := req.Cwd
+
+	// Capture stdout and stderr
+	var stdout, stderr bytes.Buffer
+
+	cmd := exec.Command("cmd", "/c", req.Command)
+
+	cmd.Dir = dir
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	var exitStatus int32 = 0
+
+	err := cmd.Run()
+	if err != nil {
+		log.Printf("command %v failed.\nstdout : %v\nstderr :%v", cmd.Stdin, stdout.String(), stderr.String())
+		if exitError, ok := err.(*exec.ExitError); ok {
+			exitStatus = int32(exitError.ExitCode())
+		}
+	}
 
 	resp := &bashpb.CommandResponse{
-		Stdout:     string(out),
-		Stderr:     "",
-		ExitStatus: 0,
+		Stdout:     stdout.String(),
+		Stderr:     stderr.String(),
+		ExitStatus: exitStatus,
 	}
 	if err != nil {
 		resp.ExitStatus = 1
@@ -74,21 +103,17 @@ func (s *BashServiceServer) Execute(ctx context.Context, req *bashpb.CommandRequ
 	return resp, nil
 }
 
-func (s *BashServiceServer) ExecuteStream(ctx context.Context, req *bashpb.CommandRequest) (*bashpb.CommandResponse, error) {
-	//if runtime.GOOS == "windows" {
-	//	return nil, fmt.Errorf("an't Execute this on a windows machine")
-	//
-	//}
-	out, err := exec.Command("cmd", "/c", req.Command).Output()
-
-	resp := &bashpb.CommandResponse{
-		Stdout:     string(out),
-		Stderr:     "",
-		ExitStatus: 0,
+func (s *BashServiceServer) ExecuteAndPoll(req *bashpb.CommandRequest, stream bashpb.BashService_ExecuteAndPollServer) error {
+	// Put the command in a string slice
+	// Declare the current working directory
+	for {
+		resp, err := RunCommand(req)
+		if err != nil {
+			return err
+		}
+		if err = stream.Send(resp); err != nil {
+			return err
+		}
+		time.Sleep(1 * time.Second)
 	}
-	if err != nil {
-		resp.ExitStatus = 1
-	}
-
-	return resp, nil
 }

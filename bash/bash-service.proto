@@ -22,6 +22,6 @@ message CommandResponse{
 
 service BashService{
     // Run a command
-    rpc Execute(CommandRequest) returns (CommandResponse);
-    rpc ExecuteStream(CommandRequest) returns (CommandResponse);
+    rpc Execute (CommandRequest) returns (CommandResponse) {}
+    rpc ExecuteAndPoll (CommandRequest) returns (stream CommandResponse) {}
 }
