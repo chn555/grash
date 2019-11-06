@@ -3,15 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
+	bashpb "github.com/chn555/grash/bash"
 	"google.golang.org/grpc"
 	"log"
 	"net"
 	"os"
 	"os/exec"
 	"os/signal"
-	"runtime"
-
-	bashpb "github.com/chn555/grash/bash"
 )
 
 type BashServiceServer struct{}
@@ -58,11 +56,11 @@ func main() {
 }
 
 func (s *BashServiceServer) Execute(ctx context.Context, req *bashpb.CommandRequest) (*bashpb.CommandResponse, error) {
-	if runtime.GOOS == "windows" {
-		return nil, fmt.Errorf("an't Execute this on a windows machine")
-
-	}
-	out, err := exec.Command("ls").Output()
+	//if runtime.GOOS == "windows" {
+	//	return nil, fmt.Errorf("an't Execute this on a windows machine")
+	//
+	//}
+	out, err := exec.Command("cmd", "/c", req.Command).Output()
 
 	resp := &bashpb.CommandResponse{
 		Stdout:     string(out),
@@ -76,12 +74,12 @@ func (s *BashServiceServer) Execute(ctx context.Context, req *bashpb.CommandRequ
 	return resp, nil
 }
 
-func (s *BashServiceServer) ExecuteStream(context.Context, *bashpb.CommandRequest) (*bashpb.CommandResponse, error) {
-	if runtime.GOOS == "windows" {
-		return nil, fmt.Errorf("an't Execute this on a windows machine")
-
-	}
-	out, err := exec.Command("ls").Output()
+func (s *BashServiceServer) ExecuteStream(ctx context.Context, req *bashpb.CommandRequest) (*bashpb.CommandResponse, error) {
+	//if runtime.GOOS == "windows" {
+	//	return nil, fmt.Errorf("an't Execute this on a windows machine")
+	//
+	//}
+	out, err := exec.Command("cmd", "/c", req.Command).Output()
 
 	resp := &bashpb.CommandResponse{
 		Stdout:     string(out),
