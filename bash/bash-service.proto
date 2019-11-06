@@ -1,0 +1,27 @@
+syntax = "proto3";
+package bash;
+
+
+message CommandRequest{
+    // Actual command to run
+    string command = 1;
+    // User to run as
+    string user = 2;
+    // Current working directory
+    string cwd = 3;
+}
+
+message CommandResponse{
+    // Standard output
+    string stdout = 1;
+    // Standard error
+    string stderr = 2;
+    // Exit status
+    int32 exitStatus = 3;
+}
+
+service BashService{
+    // Run a command
+    rpc Execute(CommandRequest) returns (CommandResponse);
+    rpc ExecuteStream(CommandRequest) returns (CommandResponse);
+}
