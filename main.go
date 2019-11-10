@@ -58,16 +58,6 @@ func main() {
 }
 
 func (s *BashServiceServer) Execute(ctx context.Context, req *bashpb.CommandRequest) (*bashpb.CommandResponse, error) {
-	//if runtime.GOOS == "windows" {
-	//	return nil, fmt.Errorf("an't Execute this on a windows machine")
-	//
-	//}
-	//out, err := exec.Command("cmd", "/c", req.Command).Output()
-
-	return RunCommand(req)
-}
-
-func RunCommand(req *bashpb.CommandRequest) (*bashpb.CommandResponse, error) {
 	// Put the command in a string slice
 	// Declare the current working directory
 	dir := req.Cwd
@@ -83,12 +73,29 @@ func RunCommand(req *bashpb.CommandRequest) (*bashpb.CommandResponse, error) {
 
 	var exitStatus int32 = 0
 
-	err := cmd.Run()
+	err := cmd.Start()
+	errChan := make(chan error)
+
 	if err != nil {
 		log.Printf("command %v failed.\nstdout : %v\nstderr :%v", cmd.Stdin, stdout.String(), stderr.String())
 		if exitError, ok := err.(*exec.ExitError); ok {
 			exitStatus = int32(exitError.ExitCode())
 		}
+	}
+
+	go func() {
+		errChan <- cmd.Wait()
+	}()
+
+	select {
+	case <-ctx.Done():
+		_ = cmd.Process.Kill()
+		return &bashpb.CommandResponse{
+			Stdout:     "Request was cancelled",
+			ExitStatus: 1,
+		}, nil
+	case <-errChan:
+		break
 	}
 
 	resp := &bashpb.CommandResponse{
@@ -103,17 +110,64 @@ func RunCommand(req *bashpb.CommandRequest) (*bashpb.CommandResponse, error) {
 	return resp, nil
 }
 
-func (s *BashServiceServer) ExecuteAndPoll(req *bashpb.CommandRequest, stream bashpb.BashService_ExecuteAndPollServer) error {
+func (s *BashServiceServer) ExecuteAndStream(req *bashpb.CommandRequest, stream bashpb.BashService_ExecuteAndStreamServer) error {
 	// Put the command in a string slice
 	// Declare the current working directory
-	for {
-		resp, err := RunCommand(req)
-		if err != nil {
-			return err
+	dir := req.Cwd
+
+	// Capture stdout and stderr
+	var stdout, stderr bytes.Buffer
+
+	cmd := exec.Command("cmd", "/c", req.Command)
+
+	cmd.Dir = dir
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	var exitStatus int32
+
+	err := cmd.Start()
+	if err != nil {
+		log.Printf("command %v failed.\nstdout : %v\nstderr :%v", cmd.Stdin, stdout.String(), stderr.String())
+		if exitError, ok := err.(*exec.ExitError); ok {
+			exitStatus = int32(exitError.ExitCode())
 		}
-		if err = stream.Send(resp); err != nil {
-			return err
-		}
-		time.Sleep(1 * time.Second)
 	}
+
+	errChan := make(chan error)
+
+	go func() {
+		errChan <- cmd.Wait()
+	}()
+
+	for {
+		select {
+		case err = <-errChan:
+			if err != nil {
+				log.Printf("command %v failed.\nstdout : %v\nstderr :%v", cmd.Stdin, stdout.String(), stderr.String())
+				if exitError, ok := err.(*exec.ExitError); ok {
+					exitStatus = int32(exitError.ExitCode())
+				}
+			}
+			_ = stream.Send(&bashpb.CommandResponse{
+				Stdout:     stdout.String(),
+				Stderr:     stderr.String(),
+				ExitStatus: exitStatus,
+			})
+			return nil
+		default:
+			err = stream.Send(&bashpb.CommandResponse{
+				Stdout:     stdout.String(),
+				Stderr:     stderr.String(),
+				ExitStatus: exitStatus,
+			})
+			if err != nil {
+				fmt.Printf("cannot send to stream.\n")
+				_ = cmd.Process.Kill()
+				return err
+			}
+			fmt.Printf("Sent response\n")
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
+
 }

@@ -5,10 +5,8 @@ package bash;
 message CommandRequest{
     // Actual command to run
     string command = 1;
-    // User to run as
-    string user = 2;
     // Current working directory
-    string cwd = 3;
+    string cwd = 2;
 }
 
 message CommandResponse{
@@ -23,5 +21,5 @@ message CommandResponse{
 service BashService{
     // Run a command
     rpc Execute (CommandRequest) returns (CommandResponse) {}
-    rpc ExecuteAndPoll (CommandRequest) returns (stream CommandResponse) {}
+    rpc ExecuteAndStream (CommandRequest) returns (stream CommandResponse) {}
 }
